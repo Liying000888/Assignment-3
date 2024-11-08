@@ -1,0 +1,171 @@
+---
+title: "Assignment 3"
+author: "Liying Deng"
+format: html
+editor: visual
+embed-resources: true
+---
+
+# Loading the data package
+
+```{r}
+library(dplyr)
+library(tidytext)
+library(data.table) 
+library(tidyverse)
+library(ggplot2)
+library(forcats)
+Pubmed <- data.table::fread("/Users/kristydeng/Downloads/pubmed.csv")
+```
+
+1.Tokenize the abstracts and count the number of each token. Do you see anything interesting? Does removing stop words change what tokens appear as the most frequent? What are the 5 most common tokens for each search term after removing stopwords?
+First Step, we need to look at the top 10 tokens of the abstracts without remove stop words.
+```{r}
+top_tokens <- Pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  count(token, sort = TRUE) %>%
+  slice_max(n, n = 10) 
+top_tokens
+```
+Second step, remove the stop words
+```{r}
+tokenized_words <- Pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  count(word, sort = TRUE)
+data("stop_words")
+tokenized_words_filtered <- tokenized_words %>%
+  anti_join(stop_words)
+top_5_tokens <- Pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  anti_join(stop_words) %>%
+  count(term, word, sort = TRUE) %>%
+  group_by(term) %>%
+  slice_max(n = 5, order_by = n)
+print(top_5_tokens,n = Inf)
+```
+
+#Conculsion: After removing stopwords, the results provide a clearer view of domain-specific terms, which are more informative and help us identify key topics related to each search term. 
+
+5 Most Common Tokens for Each Search Term After Removing Stopwords: 
+
+(1).Covid:'covid', '19', 'patients', 'disease', and 'pandemic' 
+
+(2).Cystic Fibrosis:'fibrosis', 'cystic', 'cf', 'patients', and 'disease' 
+
+(3).Meningitis:'patients', 'meningitis', 'meningeal', 'csf', and 'clinical' 
+
+(4).Preeclampsia:'preeclampsia', 'eclampsia', 'women', 'pregnancy', and 'maternal' 
+
+(5).Prostate Cancer:'cancer', 'prostate', 'patients', 'treatment', and 'disease'
+
+2.Tokenize the abstracts into bigrams. Find the 10 most common bigrams and visualize them with ggplot2.
+
+```{r}
+bigrams <- Pubmed %>%
+  unnest_tokens(bigram, abstract, token = "ngrams", n = 2) %>%
+  count(bigram, sort = TRUE)
+top_10_bigrams <- bigrams %>%
+  slice_max(n = 10, order_by = n)
+ggplot(top_10_bigrams, aes(x = reorder(bigram, n), y = n)) +
+  geom_col(fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Top 10 Most Common Bigrams in PubMed Abstracts", x = "Bigram", y = "Frequency") +
+  theme_minimal()
+```
+
+#Conclusion: The 10 most common: 'covid 19'  'of the'  'in the''prostate cancer' 'pre eclampsia' 'patients with' 'of covid' 'and the' 'to the''of prostate'
+
+3.Calculate the TF-IDF value for each word-search term combination (here you want the search term to be the “document”). What are the 5 tokens from each search term with the highest TF-IDF value? How are the results different from the answers you got in question 1?
+
+```{r}
+tokenized_words <- Pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  count(term, word, sort = TRUE) %>%
+  anti_join(stop_words)
+tfidf <- tokenized_words %>%
+  bind_tf_idf(word, term, n) %>%
+  arrange(desc(tf_idf))
+top_5_tfidf_tokens <- tfidf %>%
+  group_by(term) %>%
+  slice_max(n = 5, order_by = tf_idf)
+print(top_5_tfidf_tokens,n = Inf)
+```
+
+#Conclusion: In Question 1, we analyzed word frequency without accounting for the relevance of terms across different search queries. As a result, frequently used words like "patients" and "disease" appeared prominently. However, in the TF-IDF analysis, terms unique to each query receive higher scores, emphasizing words that distinguish one search from another. Consequently, the most frequent terms do not always have the highest TF-IDF values. Instead, words that uniquely characterize each query achieve higher TF-IDF scores, offering deeper insights into the unique aspects of each topic.
+
+The 5 term with the highest TF-IDF value:
+
+(1).Covid: covid: TF-IDF = 0.1041 pandemic: TF-IDF = 0.0114 coronavirus: TF-IDF = 0.0093 sars: TF-IDF = 0.0053 cov: TF-IDF = 0.0048
+
+(2). Cystic Fibrosis: cf: TF-IDF = 0.0215 fibrosis: TF-IDF = 0.0166 cystic: TF-IDF = 0.0165 cftr: TF-IDF = 0.0052 sweat: TF-IDF = 0.0050
+
+(3). Meningitis: meningitis: TF-IDF = 0.0264 meningeal: TF-IDF = 0.0135 pachymeningitis: TF-IDF = 0.0092 csf: TF-IDF = 0.0072 meninges: TF-IDF = 0.0065
+
+(4). Preeclampsia: eclampsia: TF-IDF = 0.0411 preeclampsia: TF-IDF = 0.0382 pregnancy: TF-IDF = 0.0063 maternal: TF-IDF = 0.0052 gestational: TF-IDF = 0.0039
+
+(5). Prostate Cancer: prostate: TF-IDF = 0.0906 androgen: TF-IDF = 0.0072 psa: TF-IDF = 0.0067 prostatectomy: TF-IDF = 0.0051 castration: TF-IDF = 0.0035
+
+# Sentiment Analysis
+
+1.Perform a sentiment analysis using the NRC lexicon. What is the most common sentiment for each search term? What if you remove "positive" and "negative" from the list?
+
+```{r}
+library(textdata)
+nrc_sentiments <- get_sentiments("nrc")
+nrc_sentiment_analysis <- Pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(nrc_sentiments, by = "word") %>%
+  count(term, sentiment, sort = TRUE)
+most_common_sentiment <- nrc_sentiment_analysis %>%
+  group_by(term) %>%
+  slice_max(n = 1, order_by = n)
+print(most_common_sentiment)
+nrc_sentiment_filtered <- nrc_sentiment_analysis %>%
+  filter(!(sentiment %in% c("positive", "negative")))
+most_common_sentiment_filtered <- nrc_sentiment_filtered %>%
+  group_by(term) %>%
+  slice_max(n = 1, order_by = n)
+print(most_common_sentiment_filtered)
+```
+
+#Conclusion: the sentiment for each search term before "positive" and "negative" sentiments: 
+
+(1)covid: Positive (n = 9874) 
+
+(2)cystic fibrosis: Positive (n = 2747) 
+
+(3)meningitis: Negative (n = 2109) 
+
+(4)preeclampsia: Positive (n = 8014) 
+
+(5)prostate cancer: Negative (n = 8918) 
+
+After remove "Positive" and "Negative": 
+
+(1)covid: Fear (n = 7730) 
+
+(2)cystic fibrosis: Disgust (n = 1714) 
+
+(3)meningitis: Fear (n = 1510) 
+
+(4)preeclampsia: Anticipation (n = 4780) 
+
+(5)prostate cancer: Fear (n = 8118)
+
+2.Now perform a sentiment analysis using the AFINN lexicon to get an average positivity score for each abstract (hint: you may want to create a variable that indexes, or counts, the abstracts). Create a visualization that shows these scores grouped by search term. Are any search terms noticeably different from the others?
+
+```{r}
+afinn_lexicon <- get_sentiments("afinn")
+afinn_scores <- Pubmed %>%
+  mutate(abstract_id = row_number()) %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(afinn_lexicon, by = "word") %>%
+  group_by(term, abstract_id) %>%
+  summarise(avg_score = mean(value, na.rm = TRUE), .groups = "drop")
+
+ggplot(afinn_scores, aes(x = factor(term), y = avg_score, fill = term)) +
+  geom_boxplot() +
+  labs(title = "AFINN Sentiment Scores by Search Term", x = "Search Term", y = "Average Sentiment Score")
+```
+
+#Conclusion: Each search term has a different range of sentiment scores, as depicted in the boxplots.For meningitis and prostate Cancer, the sentiment scores are generally below zero, indicating that discussions around these terms are often negative, possibly due to their association with severe health conditions.The median score for "covid" is close to zero, with a wide range extending both into positive and negative scores. This variability suggests that the sentiment associated with "covid" is mixed, reflecting both negative and positive contexts depending on the discussion.Cystic fibrosis shows a noticeably higher average sentiment score compared to other search terms. The median score is above zero, indicating that there may be more positive or optimistic discussions around this term. Preeclampsia have narrower ranges and lower median sentiment scores. This indicates a more negative sentiment on average compared to other terms, possibly reflecting the perceived seriousness of these conditions.
